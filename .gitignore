@@ -1,0 +1,13 @@
+.venv/
+.uv-cache/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+dist/
+validation/
+scratch/
+pyligprep-*.log
+pyligprep-*.err
+*.egg-info/
