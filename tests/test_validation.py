@@ -111,7 +111,7 @@ def test_bad_options_rejected_without_calculation(tmp_path):
   with pytest.raises(InputError):
     QuantumOptions(threads=0).validate()
   for options in (
-    OptimizationOptions(max_steps=0),
+    OptimizationOptions(opt_max_cycles=0),
     OptimizationOptions(optimizer="bogus"),
     OptimizationOptions(constraints="$freeze\nxyz 1\n$end"),
   ):

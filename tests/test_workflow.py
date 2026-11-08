@@ -237,10 +237,10 @@ def test_gpu_pipeline_and_optimizer_restart(ethanol_pdb, tmp_path, amber_bin):
   molecule = load_molecule(ethanol_pdb, 0, 1)
   quantum = QuantumOptions(device="gpu", threads=4, memory_mb=12000)
   output = tmp_path / "opt"
-  options = OptimizationOptions(max_steps=1)
+  options = OptimizationOptions(opt_max_cycles=1)
   with pytest.raises(CalculationError, match="Geometry did not converge"):
     optimize(molecule, output, options, quantum)
-  berny = optimize(molecule, output, replace(options, max_steps=100), quantum, resume=True)
+  berny = optimize(molecule, output, replace(options, opt_max_cycles=100), quantum, resume=True)
   assert berny["converged"]
   from pyligprep.model import Molecule
 
@@ -248,7 +248,7 @@ def test_gpu_pipeline_and_optimizer_restart(ethanol_pdb, tmp_path, amber_bin):
   geometric = optimize(
     final,
     tmp_path / "geometric",
-    OptimizationOptions(optimizer="geometric", max_steps=10),
+    OptimizationOptions(optimizer="geometric", opt_max_cycles=10),
     quantum,
   )
   assert geometric["converged"]

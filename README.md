@@ -186,7 +186,7 @@ The default is Berny with B3LYP-D3BJ/6-31+G(d,p). Example of changing the algori
 pyligprep opt -i ligand_h.pdb -o work_geometric/opt \
   --charge -1 --multiplicity 1 --device gpu \
   --optimizer geometric --method B3LYP-D3BJ --basis '6-31+G(d,p)' \
-  --max-steps 400 --threads 8 --memory-mb 22000
+  --opt-maxcycles 400 --threads 8 --memory-mb 22000
 ```
 
 `--optimizer berny` selects Berny explicitly. Quote basis set names containing parentheses, as above. `--method` and `--basis` apply to the optimization only and do not affect the HF/6-31G* of the later ESP calculation. The final structure is written as `work/opt/optimized.xyz` and `work/opt/optimized.pdb`. Use `--from work/opt` for the next step.
@@ -357,7 +357,7 @@ so submit it with an `sbatch` option that requests one.
 project=$PWD/sin_work sbatch --gpus=1 scripts/run_sin_slurm.sh
 
 # Resume a calculation that stopped midway (arguments after --resume are passed to pyligprep run)
-project=$PWD/sin_work sbatch --gpus=1 scripts/run_sin_slurm.sh --resume --max-steps 400
+project=$PWD/sin_work sbatch --gpus=1 scripts/run_sin_slurm.sh --resume --opt-maxcycles 400
 ```
 
 Slurm's standard output and standard error go to `run_sin_slurm.sh.JOBID.out` / `.err`.
@@ -378,12 +378,13 @@ allocation. To change the allocation too, put `sbatch` options before the script
 | Spin | RKS for closed-shell singlets, UKS otherwise. Can be set with `--scf-type rks` / `uks` (`opt` / `run` only) |
 | SCF | DFT uses density fitting and Newton SCF (at most 100 cycles), integration grid level 3 |
 | Convergence | SCF energy 1e-10, gradient 1e-6. Berny: gradientmax 1.5e-5, gradientrms 1e-5, stepmax 6e-5, steprms 4e-5 (atomic units) |
-| Steps | `--max-steps 200` |
-| Initial trust radius | `--opt-trust N`: positive integer on the Gaussian `Opt=MaxStep=N` scale; omitted by default |
+| Optimization cycle limit | `--opt-maxcycles 200` (Gaussian `Opt=MaxCycles`) |
+| Initial trust radius | `--opt-maxstep N`: positive integer on the Gaussian `Opt=MaxStep=N` scale; omitted by default |
 | geomeTRIC | GAU_TIGHT, analytical initial Hessian, trust=0.05, tmax=0.10 |
 | Geometry constraints | geomeTRIC only: `--constraints constraints.txt`, atom numbers start at 1 |
 | Device | `--device auto` / `gpu` / `cpu` |
-| Resources | `--threads 8 --memory-mb 22000 --max-scf-cycles 512` |
+| Resources | `--threads 8 --memory-mb 22000` |
+| SCF cycle limit | `--scf-maxcycle 512` (Gaussian `SCF=MaxCycle`; DFT Newton SCF is capped at 100) |
 | ESP | Gas-phase HF/6-31G*, Cartesian d functions, RHF for closed shell / UHF for open shell, no density fitting |
 | ESP grid | GAMESS radii from GPU4PySCF 1.9.1, scale factors 1.4/1.6/1.8/2.0, `--density 1.0` points/Å² |
 | RESP | Restraint weights `--qwt1 0.0005 --qwt2 0.001`, hyperbola parameter 0.1, hydrogens unrestrained |
@@ -391,27 +392,27 @@ allocation. To change the allocation too, put `sbatch` options before the script
 | RESP equivalence | `--equivalence-depth 3` (1–5); explicit constraints with `--resp-constraints FILE` |
 
 Give optimization options to `opt` / `run`, and ESP/RESP options to `resp` / `run`.
-`--device` / `--threads` / `--memory-mb` / `--max-scf-cycles` are
+`--device` / `--threads` / `--memory-mb` / `--scf-maxcycle` are
 common to `opt` / `resp` / `run`. `export` generates files from saved charges, so it
 needs no GPU and does not accept these quantum-chemistry options.
-`--max-scf-cycles` applies as given to the HF for the ESP, but the DFT Newton SCF is capped at 100.
+`--scf-maxcycle` applies as given to the HF for the ESP, but the DFT Newton SCF is capped at 100.
 The HF for the ESP is RHF for a closed-shell singlet and UHF otherwise, regardless of `--scf-type`.
 
 Berny's internal-coordinate thresholds and geomeTRIC's Cartesian thresholds are not the same thing.
 
-`--opt-trust N` controls the **initial geometry trust radius**, using the input scale of Gaussian 16's
-`Opt=MaxStep=N`: `0.01 * N` in Bohr/radian for Berny's internal coordinates. For example, `--opt-trust 10`
-sets Berny's initial radius to `0.1`, and `--opt-trust 30` to `0.3`. Only positive integers are accepted.
-For geomeTRIC, the length is converted to Å: `--opt-trust 10` gives approximately `0.052918 Å`.
+`--opt-maxstep N` controls the **initial geometry trust radius**, using the input scale of Gaussian 16's
+`Opt=MaxStep=N`: `0.01 * N` in Bohr/radian for Berny's internal coordinates. For example, `--opt-maxstep 10`
+sets Berny's initial radius to `0.1`, and `--opt-maxstep 30` to `0.3`. Only positive integers are accepted.
+For geomeTRIC, the length is converted to Å: `--opt-maxstep 10` gives approximately `0.052918 Å`.
 geomeTRIC uses a Cartesian displacement metric, so this conversion does not make the two optimizers or
 their steps equivalent to Gaussian. Its `tmax` remains `0.10 Å` unless the requested initial radius is
 larger; in that case `tmax` is raised to the initial radius to prevent silent clipping.
 
 When omitted for a new calculation, existing defaults are kept: Berny `0.3` and geomeTRIC `0.05 Å`
-with `tmax=0.10 Å`. On resume, an omitted `--opt-trust` keeps the saved value; an explicit value overrides
-it, and older saved states without this option use the existing defaults. The optimizer may adjust the
+with `tmax=0.10 Å`. On resume, an omitted `--opt-maxstep` keeps the saved value; an explicit value overrides
+it. Saved settings that omit this option use the backend defaults. The optimizer may adjust the
 radius during optimization. This option does not set a fixed maximum step, the geometry convergence
-thresholds (`stepmax` / `steprms`), the iteration count (`--max-steps`), or the SCF orbital rotation step.
+thresholds (`stepmax` / `steprms`), the iteration count (`--opt-maxcycles`), or the SCF orbital rotation step.
 
 `auto` falls back to the CPU when GPU initialization is unavailable.
 SCF non-convergence, out-of-memory, and other failures after a GPU start are never hidden by rerunning on the CPU.
@@ -425,15 +426,20 @@ the applicability of the charges and force field must be checked separately.
 Resuming reloads the original input and settings and changes only the settings given in addition.
 Repeating the same `-i ... -o ...` as a new run against an existing directory stops without overwriting.
 
+The Python option fields and saved setting keys are `opt_max_cycles`, `opt_max_step`, and `scf_max_cycle`.
+The previous CLI names `--max-steps`, `--opt-trust`, and `--max-scf-cycles` have been removed without aliases.
+Saved states containing the old keys `max_steps`, `opt_trust`, or `max_scf_cycles` cannot be resumed;
+start a new calculation with a new output directory. Existing calculation files are not migrated.
+
 ```bash
 # Continue an optimization that failed for lack of steps, from the saved structure
-pyligprep opt --resume work/opt --max-steps 400
+pyligprep opt --resume work/opt --opt-maxcycles 400
 
 # Switch the optimization algorithm, starting from the same structure
 pyligprep opt --resume work/opt --optimizer geometric
 
 # Restart from the saved geometry with a specified initial trust radius (Gaussian MaxStep=10 scale)
-pyligprep opt --resume work/opt --opt-trust 10
+pyligprep opt --resume work/opt --opt-maxstep 10
 
 # If the RESP fit ran out of iterations, continue while reusing the completed ESP
 pyligprep resp --resume work/resp --max-iterations 100

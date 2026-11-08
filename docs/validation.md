@@ -1,6 +1,17 @@
 # 検証記録
 
 初期実装の検証日：2026-11-06。
+以下のコマンド表記は現行の引数名に統一している。
+
+## 最適化・SCFの引数名統一（2026-11-08追記）
+
+- 引数を `--opt-maxcycles`、`--opt-maxstep`、`--scf-maxcycle`、Pythonのフィールドと保存キーを
+  `opt_max_cycles`、`opt_max_step`、`scf_max_cycle` に統一。計算条件の値・単位・バックエンドへの渡し方は維持。
+- 新名称のCLIから計算処理への受け渡し、再開時の保存設定継承と上書き、旧引数の拒否を確認。
+  旧キーを含む保存状態は説明付きエラーで停止し、状態ファイルを書き換えないことも確認。
+- 通常テスト **179件成功、15件スキップ**（GPU・AmberTools・reference）。GPUジョブの投入は行っていない。
+  Ruffと変更ファイルのtyは成功。全体のtyでは、変更前から存在する `dispersion.py` の3件
+  （`dftd3` / `dftd3.pyscf` のimport解決とモジュール代入の型）が残ることを確認。
 
 ## 出力構成の簡素化（成果物＋versions.json＋tmp/）と `run --keep-tmp`（2026-11-08追記）
 
@@ -16,8 +27,8 @@
   - `--keep-tmp` で残した出力への `run --resume` はキャッシュを再利用して0秒で完了。`-r SIM` での再実行は出力工程だけを更新し（1秒）、
     `SIN.*` も残る。
   - `tmp/` を削除した完了済みディレクトリへの `run --resume` は、案内つきのエラー（終了コード2）で停止。
-  - `--max-steps 1` で最適化を未収束のまま停止させると、直下には `tmp/` だけが残り（`last.json`・`restart.chk` を含む）、
-    `run --resume --max-steps 200` で続きから完了して `tmp/` が削除された。
+  - `--opt-maxcycles 1` で最適化を未収束のまま停止させると、直下には `tmp/` だけが残り（`last.json`・`restart.chk` を含む）、
+    `run --resume --opt-maxcycles 200` で続きから完了して `tmp/` が削除された。
 - コードレビューの指摘を受け、`tmp/` 削除失敗を警告扱い、`export --resume` での `resp-source.json` 欠落を案内つきエラー、
   `versions.json` に現在の成果物名を記録、公開の記録をファイルごとに保存するよう修正。
 - AmberTools込みの非GPUテスト **137件成功**（GPU・referenceの5件は対象外）。Ruff・tyの指摘ゼロ。

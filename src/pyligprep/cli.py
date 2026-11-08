@@ -7,7 +7,7 @@ from dataclasses import fields
 from pathlib import Path
 
 from pyligprep import __version__
-from pyligprep.errors import PreparationError
+from pyligprep.errors import InputError, PreparationError
 
 VERSION_LINE = f"pyligprep {__version__}"
 
@@ -37,16 +37,27 @@ def _quantum_arguments(parser):
   parser.add_argument("--device", choices=("auto", "gpu", "cpu"))
   parser.add_argument("--threads", type=int)
   parser.add_argument("--memory-mb", type=int)
-  parser.add_argument("--max-scf-cycles", type=int)
+  parser.add_argument(
+    "--scf-maxcycle",
+    dest="scf_max_cycle",
+    type=int,
+    help="SCF cycle limit (default 512; DFT Newton SCF is capped at 100)",
+  )
 
 
 def _opt_arguments(parser):
   parser.add_argument("--optimizer", type=str.lower, choices=("berny", "geometric"))
   parser.add_argument("--method")
   parser.add_argument("--basis")
-  parser.add_argument("--max-steps", type=int)
   parser.add_argument(
-    "--opt-trust",
+    "--opt-maxcycles",
+    dest="opt_max_cycles",
+    type=int,
+    help="Geometry optimization cycle limit (default 200; Gaussian Opt=MaxCycles)",
+  )
+  parser.add_argument(
+    "--opt-maxstep",
+    dest="opt_max_step",
     type=int,
     metavar="N",
     help=(
@@ -122,6 +133,12 @@ def make_parser():
 
 def _options(cls, args, saved, group):
   values = {**saved.get(group, {})}
+  unknown = values.keys() - {field.name for field in fields(cls)}
+  if unknown:
+    raise InputError(
+      f"Unsupported saved {group} settings: {', '.join(sorted(unknown))}; "
+      "start a new calculation in a new output directory with -o"
+    )
   for field in fields(cls):
     value = getattr(args, field.name, None)
     if field.name == "constraints":

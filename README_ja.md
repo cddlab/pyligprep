@@ -186,7 +186,7 @@ pyligprep opt -i ligand_h.pdb -o work/opt \
 pyligprep opt -i ligand_h.pdb -o work_geometric/opt \
   --charge -1 --multiplicity 1 --device gpu \
   --optimizer geometric --method B3LYP-D3BJ --basis '6-31+G(d,p)' \
-  --max-steps 400 --threads 8 --memory-mb 22000
+  --opt-maxcycles 400 --threads 8 --memory-mb 22000
 ```
 
 `--optimizer berny` でBernyを明示できる。括弧を含む基底関数名は上の例のように引用符で囲む。`--method` と `--basis` は最適化の設定であり、後続のESP計算のHF/6-31G*には影響しない。最適化の最終構造は `work/opt/optimized.xyz` と `work/opt/optimized.pdb` に出力される。後続工程には `--from work/opt` を使用する。
@@ -357,7 +357,7 @@ GPUを要求するオプションを `sbatch` に付けて投入する。
 project=$PWD/sin_work sbatch --gpus=1 scripts/run_sin_slurm.sh
 
 # 途中で止まった計算を再開する（--resume 以降は pyligprep run に渡される）
-project=$PWD/sin_work sbatch --gpus=1 scripts/run_sin_slurm.sh --resume --max-steps 400
+project=$PWD/sin_work sbatch --gpus=1 scripts/run_sin_slurm.sh --resume --opt-maxcycles 400
 ```
 
 Slurmの標準出力・標準エラーは `run_sin_slurm.sh.JOBID.out` / `.err`。
@@ -378,12 +378,13 @@ Slurmの標準出力・標準エラーは `run_sin_slurm.sh.JOBID.out` / `.err`�
 | スピン | 閉殻一重項RKS、それ以外UKS。`--scf-type rks` / `uks` で明示可（`opt` / `run` のみ） |
 | SCF | DFTは密度フィッティングとNewton SCF（最大100サイクル）、積分グリッドlevel 3 |
 | 収束 | SCFエネルギー1e-10・勾配1e-6。Bernyは gradientmax 1.5e-5、gradientrms 1e-5、stepmax 6e-5、steprms 4e-5（原子単位） |
-| ステップ | `--max-steps 200` |
-| 初期信頼半径 | `--opt-trust N`：Gaussianの `Opt=MaxStep=N` と同じ入力スケールの正整数。既定では未指定 |
+| 最適化の反復回数上限 | `--opt-maxcycles 200`（Gaussianの `Opt=MaxCycles` に対応） |
+| 初期信頼半径 | `--opt-maxstep N`：Gaussianの `Opt=MaxStep=N` と同じ入力スケールの正整数。既定では未指定 |
 | geomeTRIC | GAU_TIGHT、初期解析Hessian、trust=0.05、tmax=0.10 |
 | 幾何拘束 | geomeTRICのみ `--constraints constraints.txt`、原子番号は1始まり |
 | 計算装置 | `--device auto` / `gpu` / `cpu` |
-| 資源 | `--threads 8 --memory-mb 22000 --max-scf-cycles 512` |
+| 資源 | `--threads 8 --memory-mb 22000` |
+| SCFの反復回数上限 | `--scf-maxcycle 512`（Gaussianの `SCF=MaxCycle` に対応。DFTのNewton SCFでは100が上限） |
 | ESP | 気相HF/6-31G*、Cartesian d、閉殻RHF／開殻UHF、密度フィッティングなし |
 | ESP点群 | GPU4PySCF 1.9.1のGAMESS半径、倍率1.4/1.6/1.8/2.0、`--density 1.0` 点/Å² |
 | RESP | 拘束強度 `--qwt1 0.0005 --qwt2 0.001`、双曲線半径0.1、水素は拘束対象外 |
@@ -391,26 +392,26 @@ Slurmの標準出力・標準エラーは `run_sin_slurm.sh.JOBID.out` / `.err`�
 | RESP等価性 | `--equivalence-depth 3`（1～5）、明示指定は `--resp-constraints FILE` |
 
 最適化用の引数は `opt` / `run`、ESP・RESP用の引数は `resp` / `run` に指定する。
-`--device` / `--threads` / `--memory-mb` / `--max-scf-cycles` は
+`--device` / `--threads` / `--memory-mb` / `--scf-maxcycle` は
 `opt` / `resp` / `run` に共通。`export` は保存済み電荷からファイルを生成するため
 GPUを必要とせず、これらの量子計算用引数は受け取らない。
-`--max-scf-cycles` はESP用のHFにはそのまま適用されるが、DFTのNewton SCFでは100が上限になる。
+`--scf-maxcycle` はESP用のHFにはそのまま適用されるが、DFTのNewton SCFでは100が上限になる。
 ESP用のHFは `--scf-type` に関係なく、閉殻一重項ならRHF、それ以外はUHFになる。
 
 Bernyの内部座標閾値とgeomeTRICのCartesian座標閾値は同じものではない。
 
-`--opt-trust N` は**構造最適化の初期信頼半径**を指定する。Gaussian 16の `Opt=MaxStep=N` に合わせ、
-Bernyの内部座標では `0.01 * N` Bohr/radianとする。たとえば `--opt-trust 10` は初期半径 `0.1`、
-`--opt-trust 30` は `0.3`。指定できる値は正整数のみ。
-geomeTRICでは長さをÅに換算し、`--opt-trust 10` は約 `0.052918 Å` となる。
+`--opt-maxstep N` は**構造最適化の初期信頼半径**を指定する。Gaussian 16の `Opt=MaxStep=N` に合わせ、
+Bernyの内部座標では `0.01 * N` Bohr/radianとする。たとえば `--opt-maxstep 10` は初期半径 `0.1`、
+`--opt-maxstep 30` は `0.3`。指定できる値は正整数のみ。
+geomeTRICでは長さをÅに換算し、`--opt-maxstep 10` は約 `0.052918 Å` となる。
 geomeTRICはCartesian変位に基づくため、この換算で両最適化法やステップがGaussianと同等になるわけではない。
 `tmax` は通常 `0.10 Å` を維持し、指定した初期半径がそれを超える場合は、暗黙の切詰めを避けるため
 初期半径と同じ値まで引き上げる。
 
 新規計算で省略した場合は従来の既定値を維持する：Bernyは `0.3`、geomeTRICは `0.05 Å`、`tmax=0.10 Å`。
-再開時に省略すると保存済みの値を引き継ぎ、明示すると上書きする。この設定の追加前に保存した状態では従来の既定値を使う。
+再開時に省略すると保存済みの値を引き継ぎ、明示すると上書きする。保存設定にこの項目がない場合はバックエンドの既定値を使う。
 最適化中はアルゴリズムが半径を調整する。このオプションは固定の最大ステップ、構造収束の変位閾値
-（`stepmax` / `steprms`）、反復回数（`--max-steps`）、SCFの軌道回転ステップを指定するものではない。
+（`stepmax` / `steprms`）、反復回数（`--opt-maxcycles`）、SCFの軌道回転ステップを指定するものではない。
 
 `auto` はGPU初期化が利用できない場合にCPUへフォールバックする。
 GPUで始めた後のSCF未収束・メモリ不足などをCPU再実行で隠すことはない。
@@ -424,15 +425,20 @@ GPUで始めた後のSCF未収束・メモリ不足などをCPU再実行で隠�
 再開時は元の入力・設定を読み込み、追加で指定した設定だけを変更する。
 新規実行と同じ `-i ... -o ...` を既存ディレクトリに対して繰り返すと、上書きせず停止する。
 
+Pythonのオプションフィールドと保存設定のキーは `opt_max_cycles`、`opt_max_step`、`scf_max_cycle`。
+旧引数 `--max-steps`、`--opt-trust`、`--max-scf-cycles` は廃止し、互換エイリアスは設けない。
+旧キー `max_steps`、`opt_trust`、`max_scf_cycles` を含む保存状態からは再開できないため、
+新しい出力ディレクトリを指定して新規計算する。既存の計算ファイルは自動移行しない。
+
 ```bash
 # ステップ不足で失敗した最適化を、保存済み構造から続行
-pyligprep opt --resume work/opt --max-steps 400
+pyligprep opt --resume work/opt --opt-maxcycles 400
 
 # 同じ構造から最適化アルゴリズムを切り替え
 pyligprep opt --resume work/opt --optimizer geometric
 
 # 初期信頼半径を指定して保存構造から再開（GaussianのMaxStep=10と同じ入力スケール）
-pyligprep opt --resume work/opt --opt-trust 10
+pyligprep opt --resume work/opt --opt-maxstep 10
 
 # RESPフィットの反復不足なら、完了済みESPを再利用して続行
 pyligprep resp --resume work/resp --max-iterations 100

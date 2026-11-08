@@ -58,11 +58,11 @@ def test_resume_keeps_saved_options(ethanol_pdb, tmp_path):
   ) as stage:
     stage.complete({"molecule": mol.to_dict()})
   with patch("pyligprep.optimization.optimize") as call:
-    assert cli.main(["opt", "--resume", str(root), "--max-steps", "400"]) == 0
+    assert cli.main(["opt", "--resume", str(root), "--opt-maxcycles", "400"]) == 0
   actual = call.call_args.args[2]
   assert actual.method == "PBE0-D3BJ"
   assert actual.optimizer == "geometric"
-  assert actual.max_steps == 400
+  assert actual.opt_max_cycles == 400
   assert cli.main(["resp", "--resume", str(root)]) == 2
   assert cli.main(["opt", "--resume", str(root), "--charge", "1"]) == 2
 

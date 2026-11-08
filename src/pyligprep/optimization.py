@@ -19,28 +19,28 @@ class OptimizationOptions:
   method: str = "B3LYP-D3BJ"
   basis: str = "6-31+G(d,p)"
   optimizer: str = "berny"
-  max_steps: int = 200
+  opt_max_cycles: int = 200
   scf_type: str = "auto"
   constraints: str | None = None
-  opt_trust: int | None = None
+  opt_max_step: int | None = None
 
   def __post_init__(self):
-    if self.opt_trust is not None and (type(self.opt_trust) is not int or self.opt_trust <= 0):
-      raise InputError("opt-trust must be a positive integer (Gaussian MaxStep scale: 0.01 N Bohr/radian)")
+    if self.opt_max_step is not None and (type(self.opt_max_step) is not int or self.opt_max_step <= 0):
+      raise InputError("opt-maxstep must be a positive integer (Gaussian MaxStep scale: 0.01 N Bohr/radian)")
 
   def to_dict(self) -> dict:
     settings = asdict(self)
-    # Preserve fingerprints of existing calculations when the option is omitted.
-    if self.opt_trust is None:
-      settings.pop("opt_trust")
+    # Leave the backend default implicit in saved settings.
+    if self.opt_max_step is None:
+      settings.pop("opt_max_step")
     return settings
 
 
 def _trust_parameters(options: OptimizationOptions) -> dict[str, float]:
   """Translate the Gaussian input scale to each optimizer's trust-radius convention."""
-  if options.opt_trust is None:
+  if options.opt_max_step is None:
     return {}
-  trust = 0.01 * options.opt_trust
+  trust = 0.01 * options.opt_max_step
   if options.optimizer == "geometric":
     from pyscf import lib
 
@@ -51,8 +51,8 @@ def _trust_parameters(options: OptimizationOptions) -> dict[str, float]:
 
 
 def optimizer_parameters(options: OptimizationOptions, directory: Path):
-  if options.max_steps < 1:
-    raise InputError("max-steps must be positive")
+  if options.opt_max_cycles < 1:
+    raise InputError("opt-maxcycles must be positive")
   if options.optimizer == "berny":
     if options.constraints:
       raise InputError("Constraints require --optimizer geometric")
@@ -172,13 +172,13 @@ def optimize(
         gradient.grid_response = True
       converged, final_mol = solver.kernel(
         gradient.as_scanner(),
-        maxsteps=options.max_steps,
+        maxsteps=options.opt_max_cycles,
         assert_convergence=True,
         callback=save_step,
         **parameters,
       )
       if not converged:
-        raise CalculationError(f"Geometry did not converge in {options.max_steps} steps; resume from last.xyz")
+        raise CalculationError(f"Geometry did not converge in {options.opt_max_cycles} steps; resume from last.xyz")
       final = molecule.with_coords(final_mol.atom_coords(unit="Angstrom"))
     write_xyz(stage.directory / "optimized.xyz", final, "converged")
     write_pdb(stage.directory / "optimized.pdb", final)

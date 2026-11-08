@@ -32,7 +32,7 @@ pyligprep check -i sin_h.pdb --charge -2 --multiplicity 1
 pyligprep run -i sin_h.pdb -o "sin_run" \
     --charge -2 --multiplicity 1 --device gpu --scf-type rks \
     --optimizer berny --method B3LYP-D3BJ --basis '6-31+G(d,p)' \
-    --max-steps 200 --threads 8 --memory-mb 22000 --max-scf-cycles 512 \
+    --opt-maxcycles 200 --threads 8 --memory-mb 22000 --scf-maxcycle 512 \
     --density 1.0 --qwt1 0.0005 --qwt2 0.001 \
     --max-iterations 100 --tolerance 1e-6 \
     --resp-constraints "sin_resp_constraints.json" \

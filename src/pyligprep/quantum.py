@@ -13,10 +13,10 @@ class QuantumOptions:
   device: str = "auto"
   threads: int = 8
   memory_mb: int = 22000
-  max_scf_cycles: int = 512
+  scf_max_cycle: int = 512
 
   def validate(self):
-    if self.device not in ("auto", "gpu", "cpu") or min(self.threads, self.memory_mb, self.max_scf_cycles) < 1:
+    if self.device not in ("auto", "gpu", "cpu") or min(self.threads, self.memory_mb, self.scf_max_cycle) < 1:
       raise InputError("Invalid device, threads, memory or SCF cycle limit")
 
 
@@ -104,11 +104,11 @@ def make_method(
     mf = mf.to_gpu()
   mf.conv_tol = 1e-10
   mf.conv_tol_grad = 1e-6
-  mf.max_cycle = options.max_scf_cycles
+  mf.max_cycle = options.scf_max_cycle
   mf.chkfile = str(checkpoint)
   if method.upper() != "HF":
     mf = mf.newton()
-    mf.max_cycle = min(100, options.max_scf_cycles)
+    mf.max_cycle = min(100, options.scf_max_cycle)
     mf.max_stepsize = 0.03
   return mf
 
