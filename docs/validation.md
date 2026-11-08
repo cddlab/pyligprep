@@ -197,3 +197,20 @@ GPU4PySCF 1.9.1由来のSciPy非推奨API警告が発生するが、検証結果
 初版は単一分子・単一残基・単一配座の H/C/N/O/F/P/S/Cl に限定する。
 全有機分子のプロトン化・等価原子判定・GAFF2パラメータの妥当性を保証するものではない。
 テストの生ログと生成物は開発環境の `validation/` に保存し、配布物には含めない。
+
+## 2026-11-08：最適化専用の重なり行列閾値
+
+基準コミット `2b2d0e3` に `--opt-overlap-threshold` を追加し、`quantum.py` のSCF回数名を
+`scf_max_cycle` / `--scf-maxcycle` に統一した。閾値未指定時の既定動作とキャッシュ互換性を維持する。
+
+- 追加テストのREDを確認後、通常の全体テストは251件成功、17件スキップ。
+- Slurmジョブ `258442`（q4、fdn15、GPU 1基）は3件成功、終了コード0。
+  RKS/UKSのNewton SCFから勾配scannerを2構造で実行し、GPU上の閾値保持と直交化を確認。
+  既存のCPU/GPU HF-ESP一致テストも成功。
+- CPUでもHF/DFT、制限／非制限、scanner更新、閾値の境界、異常入力、CLIの受渡し、
+  再開時の継承／上書き、キャッシュ無効化、RESPへの非伝播を検証した。
+- Ruffチェックと整形確認、変更したPythonファイルのtyチェックは成功。
+  全体のtyチェックには既存の `dispersion.py` の3件（Linuxでの `dftd3` 解決2件と代入型1件）が残る。
+- 検証は一時コピーで実施。GPUログは
+  `/home/moriwaki/tomato/scf/validation/pyligprep-overlap-1ocziobi/gpu-258442.out` に保存。
+  CL4の構造最適化そのものは再投入しておらず、CL4の収束改善は未検証。

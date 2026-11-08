@@ -124,7 +124,7 @@ def test_opt_max_step_resume_preserves_overrides_and_omitted_defaults(
   command, target, saved_value, override, expected, ethanol_pdb, tmp_path
 ):
   molecule = load_molecule(ethanol_pdb, 0, 1)
-  options = asdict(OptimizationOptions())
+  options = OptimizationOptions().to_dict()
   options.pop("opt_max_step", None)
   if saved_value is not None:
     options["opt_max_step"] = saved_value
@@ -155,7 +155,7 @@ def test_changed_opt_max_step_invalidates_completed_optimization_cache(tmp_path)
 
 def test_omitting_opt_max_step_reuses_completed_optimization_with_default_radius(ethanol_pdb, tmp_path):
   molecule = load_molecule(ethanol_pdb, 0, 1)
-  options = asdict(OptimizationOptions())
+  options = OptimizationOptions().to_dict()
   options.pop("opt_max_step", None)
   quantum = QuantumOptions(device="cpu")
   settings = {"optimization": options, "quantum": asdict(quantum)}

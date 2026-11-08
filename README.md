@@ -397,6 +397,7 @@ Outside Slurm, the default remains 8, or the saved value when resuming; `--threa
 | DFT | `--method`, `--basis` |
 | Spin | RKS for closed-shell singlets, UKS otherwise. Can be set with `--scf-type rks` / `uks` (`opt` / `run` only) |
 | SCF | DFT uses density fitting and Newton SCF (at most 100 cycles), integration grid level 3 |
+| AO overlap cutoff | `--opt-overlap-threshold VALUE`: finite positive eigenvalue cutoff for optimization only; omitted by default |
 | Convergence | SCF energy 1e-10, gradient 1e-6. Berny: gradientmax 1.5e-5, gradientrms 1e-5, stepmax 6e-5, steprms 4e-5 (atomic units) |
 | Optimization cycle limit | `--opt-maxcycles 200` (Gaussian `Opt=MaxCycles`) |
 | Initial trust radius | `--opt-maxstep N`: positive integer on the Gaussian `Opt=MaxStep=N` scale; omitted by default |
@@ -419,6 +420,26 @@ needs no GPU and does not accept these quantum-chemistry options.
 The HF for the ESP is RHF for a closed-shell singlet and UHF otherwise, regardless of `--scf-type`.
 
 Berny's internal-coordinate thresholds and geomeTRIC's Cartesian thresholds are not the same thing.
+
+`--opt-overlap-threshold 1e-8` sets the dimensionless AO overlap eigenvalue cutoff for the optimization's
+HF/DFT calculation, on either CPU or GPU. Eigenvectors with eigenvalues at or below the cutoff are discarded;
+truncation is not disabled. The setting stays with that SCF object through Newton SCF and geometry scanner
+updates, and does not change the subsequent HF/6-31G* ESP/RESP calculation or global PySCF settings.
+An explicit value requires a backend with the `check_linear_dependency` hook (verified with PySCF 2.15.0
+and GPU4PySCF 1.9.1); an unsupported backend reports an error before SCF.
+
+When omitted, a new calculation keeps the backend's existing behavior; `--resume` inherits a saved explicit
+value. An explicit value overrides the saved value and is included in the optimization cache fingerprint.
+Existing settings without this option retain their default behavior and cache compatibility. For example:
+
+```bash
+pyligprep opt --resume work/opt --opt-overlap-threshold 1e-8
+```
+
+`qm.log` records the applied cutoff, minimum overlap eigenvalue, and retained orbital count at each SCF
+evaluation. Lowering the cutoff can prevent rank changes near the old boundary, but retains more nearly
+dependent functions: verify SCF convergence and gradient accuracy. It does not relax geometry convergence
+criteria or guarantee convergence. Zero, negative, NaN, and infinite values are rejected.
 
 `--opt-maxstep N` controls the **initial geometry trust radius**, using the input scale of Gaussian 16's
 `Opt=MaxStep=N`: `0.01 * N` in Bohr/radian for Berny's internal coordinates. For example, `--opt-maxstep 10`

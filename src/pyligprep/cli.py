@@ -75,6 +75,15 @@ def _opt_arguments(parser):
     ),
   )
   parser.add_argument("--scf-type", choices=("auto", "rks", "uks"))
+  parser.add_argument(
+    "--opt-overlap-threshold",
+    type=float,
+    metavar="VALUE",
+    help=(
+      "AO overlap eigenvalue cutoff for optimization only (finite positive number, e.g. 1e-8). "
+      "Omit to keep the saved value on resume or the backend default; does not affect RESP HF"
+    ),
+  )
   parser.add_argument("--constraints", type=Path, help="geomeTRIC constraints file")
 
 

@@ -41,6 +41,7 @@ uv build
 ## アーキテクチャ
 
 ### ステージ／キャッシュ機構（`artifacts.py` の `Stage`）
+
 `opt` / `resp` / `export` / `run` はすべて `Stage` コンテキストマネージャ上で動く。これがこのコードベースの中核:
 
 - 出力構成: `-o D` の直下には成果物と `versions.json` だけを置き、それ以外はすべて `D/tmp/` に置く（`publish=True`）。
@@ -60,12 +61,14 @@ uv build
   `--resume` は `check_resumable()` が案内つきで拒否する。
 
 ### RESPのサブステップキャッシュ（`charges.py`）
+
 `resp` ステージ内で HF → ESP → stage1 → stage2 を `state.json` の `steps`（fingerprint＋ファイルハッシュ）に個別に記録し、
 `stage.reusable()` が一致を確認して同じ作業ディレクトリのファイルを再利用する（再計算前に `stage.forget()`）。
 フィット設定だけの変更ではESPを再利用。`hf.chk` は完了時に削除されるため、HFの再利用は未完了の工程を再開する場合だけ。
 ESP座標はBohr／原子単位、`Molecule` の座標はÅ（`esp.BOHR` で変換）。
 
 ### データモデルと工程間の受け渡し
+
 - `model.Molecule` / `Atom` はfrozen dataclass。原子名・順番・残基情報・形式電荷・全桁座標を保持し、`to_dict()` / `from_dict()`
   で `state.json` に保存される。工程間はPDB（丸め座標）ではなくこのdictで渡す。`from_dict` は常に `validate()` する。
 - `chemistry.read_pdb` は先頭が数字の原子名（`1H1` など）を拒否する（antechamberがMOL2作成時に元素を推定できないため）。
@@ -78,6 +81,7 @@ ESP座標はBohr／原子単位、`Molecule` の座標はÅ（`esp.BOHR` で変�
   （`test_openbabel_hadd_without_template` が `sys.modules` に `openbabel` がないことを検査）。
 
 ### CLIとパイプライン
+
 - `cli.py` は量子化学系モジュールを関数内で遅延import（`doctor` / `check` / `export` でPySCF/CuPyを読み込まないため）。
   この方針を崩さない。
 - バージョンは `pyproject.toml` の `project.version` が唯一の定義元。`pyligprep.__version__` はインストール済みメタデータ
@@ -95,17 +99,23 @@ ESP座標はBohr／原子単位、`Molecule` の座標はÅ（`esp.BOHR` で変�
   `main()` が終了コード2で表示する。
 
 ### 出力電荷の丸め（`charge_rounding.py`）
+
 電荷は小数5桁（ROUND_HALF_UP）にし、1e-5 e単位の整数演算で総和を指定電荷に厳密一致させる。RESP第2段階の等価拘束と、
 第2段階で固定された原子間の第1段階の等価拘束を維持する。両立不能な場合は明示的にエラー。
 ポリシー名 `POLICY` はexport settingsに入るため、挙動を変えたらポリシー名も更新する（既存exportのキャッシュ無効化のため）。
 
 ### D3(BJ)分散補正のバックエンド（`dispersion.py`）
+
 既定の `B3LYP-D3BJ` はPySCFが `pyscf.dispersion`（pyscf-dispersion、Linux wheelのみ）を呼ぶ。macOSでは
 `pyproject.toml` のマーカーで代わりに `dftd3`（simple-dftd3）が入り、`quantum.make_method()` が呼ぶ
 `ensure_dispersion()` が `sys.modules["pyscf.dispersion"]` に互換シムを登録する（同じs-dftd3パラメータ）。
 D4はmacOSでは `DependencyError`。`doctor` の `dispersion.d3_backend` で使われるバックエンドを確認できる。
 
 ### その他の不変条件
+
+- `--opt-overlap-threshold` は最適化専用。`overlap.py` のmixinをGPU変換後・Newton化前に適用し、
+  `check_linear_dependency` で固有値を切り捨てる。モジュールのグローバル値やRESP用HFは変更しない。
+  未指定は既存動作を維持し、明示値は `OptimizationOptions.to_dict()` を通して保存・キャッシュ判定する。
 - `--device auto` はGPU初期化失敗時のみCPUにフォールバック。GPU開始後のSCF未収束やOOMをCPU再実行で隠さない。
 - 成果物はJSON / npz（`allow_pickle=False`）/ テキストのみ。pickleは使わない。JSONは `files.write_json` で原子的に書く。
 - `--resname` は `[A-Za-z][A-Za-z0-9]{0,2}`、大小文字保持。出力prefixと残基名にのみ影響し、RESP結果・原子名は不変。

@@ -11,6 +11,7 @@ from pyligprep.chemistry import write_pdb
 from pyligprep.errors import CalculationError, InputError
 from pyligprep.files import digest, file_hash, read_json, write_json, write_xyz
 from pyligprep.model import Molecule
+from pyligprep.overlap import validate_overlap_threshold
 from pyligprep.quantum import QuantumOptions, build_molecule, choose_device, make_method, run_scf
 
 
@@ -23,8 +24,10 @@ class OptimizationOptions:
   scf_type: str = "auto"
   constraints: str | None = None
   opt_max_step: int | None = None
+  opt_overlap_threshold: float | None = None
 
   def __post_init__(self):
+    validate_overlap_threshold(self.opt_overlap_threshold)
     if self.opt_max_step is not None and (type(self.opt_max_step) is not int or self.opt_max_step <= 0):
       raise InputError("opt-maxstep must be a positive integer (Gaussian MaxStep scale: 0.01 N Bohr/radian)")
 
@@ -33,6 +36,8 @@ class OptimizationOptions:
     # Leave the backend default implicit in saved settings.
     if self.opt_max_step is None:
       settings.pop("opt_max_step")
+    if self.opt_overlap_threshold is None:
+      settings.pop("opt_overlap_threshold")
     return settings
 
 
@@ -151,6 +156,7 @@ def optimize(
         stage.directory / "scf.chk",
         quantum,
         options.scf_type,
+        opt_overlap_threshold=options.opt_overlap_threshold,
       )
       run_scf(mf, dm0, device)
       last = {"energy": float(mf.e_tot), "evaluation": 0}

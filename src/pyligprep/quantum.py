@@ -84,7 +84,12 @@ def make_method(
   checkpoint: Path,
   options: QuantumOptions,
   scf_type="auto",
+  *,
+  opt_overlap_threshold: float | None = None,
 ):
+  from pyligprep.overlap import apply_overlap_threshold, validate_overlap_threshold
+
+  validate_overlap_threshold(opt_overlap_threshold)
   from pyscf import dft, scf
 
   unrestricted = scf_type == "uks" or (scf_type == "auto" and mol.spin != 0)
@@ -102,6 +107,7 @@ def make_method(
     mf.grids.level = 3
   if device == "gpu":
     mf = mf.to_gpu()
+  mf = apply_overlap_threshold(mf, opt_overlap_threshold)
   mf.conv_tol = 1e-10
   mf.conv_tol_grad = 1e-6
   mf.max_cycle = options.scf_max_cycle

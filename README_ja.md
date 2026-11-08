@@ -397,6 +397,7 @@ Slurm外では既定値8、再開時は保存値を使い、`--threads N` で上
 | DFT | `--method`、`--basis` |
 | スピン | 閉殻一重項RKS、それ以外UKS。`--scf-type rks` / `uks` で明示可（`opt` / `run` のみ） |
 | SCF | DFTは密度フィッティングとNewton SCF（最大100サイクル）、積分グリッドlevel 3 |
+| AO重なり行列の切捨て | `--opt-overlap-threshold VALUE`：最適化専用の有限正数の固有値閾値。既定では未指定 |
 | 収束 | SCFエネルギー1e-10・勾配1e-6。Bernyは gradientmax 1.5e-5、gradientrms 1e-5、stepmax 6e-5、steprms 4e-5（原子単位） |
 | 最適化の反復回数上限 | `--opt-maxcycles 200`（Gaussianの `Opt=MaxCycles` に対応） |
 | 初期信頼半径 | `--opt-maxstep N`：Gaussianの `Opt=MaxStep=N` と同じ入力スケールの正整数。既定では未指定 |
@@ -419,6 +420,26 @@ GPUを必要とせず、これらの量子計算用引数は受け取らない�
 ESP用のHFは `--scf-type` に関係なく、閉殻一重項ならRHF、それ以外はUHFになる。
 
 Bernyの内部座標閾値とgeomeTRICのCartesian座標閾値は同じものではない。
+
+`--opt-overlap-threshold 1e-8` は、最適化のHF/DFT計算に使うAO重なり行列の無次元の固有値閾値を
+CPU/GPU共通で指定する。閾値以下の固有値に対応する固有ベクトルを除外し、切捨て処理自体は無効化しない。
+設定はSCFオブジェクトごとに保持され、Newton SCFや構造更新用scannerにも引き継がれる。
+後続のHF/6-31G* ESP/RESP計算やPySCFのグローバル設定は変更しない。
+明示指定には `check_linear_dependency` フックを持つバックエンドが必要
+（PySCF 2.15.0 / GPU4PySCF 1.9.1で検証）。未対応の場合はSCF開始前にエラーとなる。
+
+新規計算で省略するとバックエンドの既存動作を維持し、`--resume` で省略すると保存済みの明示値を引き継ぐ。
+明示値は保存値を上書きし、最適化のキャッシュfingerprintにも含まれる。
+この項目を含まない既存設定は従来の既定動作とキャッシュ互換性を維持する。例：
+
+```bash
+pyligprep opt --resume work/opt --opt-overlap-threshold 1e-8
+```
+
+`qm.log` にはSCF評価ごとに適用閾値、重なり行列の最小固有値、保持軌道数を記録する。
+閾値を下げると従来の境界付近でのランク変化を避けられる場合があるが、線形従属に近い成分も保持するため、
+SCF収束と勾配精度を確認する。構造収束基準は緩和せず、収束を保証する設定ではない。
+0、負数、NaN、無限大は拒否する。
 
 `--opt-maxstep N` は**構造最適化の初期信頼半径**を指定する。Gaussian 16の `Opt=MaxStep=N` に合わせ、
 Bernyの内部座標では `0.01 * N` Bohr/radianとする。たとえば `--opt-maxstep 10` は初期半径 `0.1`、
