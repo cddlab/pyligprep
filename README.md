@@ -345,19 +345,19 @@ On other systems, change the partition, module names, initialization path, and v
 
 | Script | Purpose | Requested resources |
 | --- | --- | --- |
-| `scripts/run_sin_slurm.sh` | Example running `check` and `run` for the succinate dianion (SIN) | 8 tasks × 1 CPU, 7 GB per CPU, no GPU requested, no time limit set |
+| `scripts/run_sin_slurm.sh` | Example running `check` and `run` for the succinate dianion (SIN) | 1 task × 8 CPUs, 7 GB per CPU, 1 GPU, no time limit set |
 | `scripts/test_gpu_slurm.sh` | Tests with the `gpu` marker (AmberTools and reference tests enabled too) | 1 GPU, 4 CPUs, 24 GB memory, 1 hour limit |
 
-`run_sin_slurm.sh` reads `sin_h.pdb` and `sin_resp_constraints.json` from the directory given by the environment variable `project`,
-and writes to `$project/sin_run`. The virtual environment path (`/home/moriwaki/...`) and `--amber-bin` are hard-coded in the script.
-It passes `--device gpu` to `run`, but the script itself does not request a GPU. It stops if placed on a node without a GPU,
-so submit it with an `sbatch` option that requests one.
+`run_sin_slurm.sh` reads `sin_h.pdb` and `sin_resp_constraints.json` from the job's working directory
+and writes to `sin_run` there. Set the virtual environment activation path (`/path/to/.venv/bin/activate`)
+and `--amber-bin` in the script. Submit it with `sbatch`; it requests one GPU and calls
+`pyligprep` directly from the batch script for both new calculations and resumes.
 
 ```bash
-project=$PWD/sin_work sbatch --gpus=1 scripts/run_sin_slurm.sh
+sbatch --chdir="$PWD/sin_work" scripts/run_sin_slurm.sh
 
 # Resume a calculation that stopped midway (arguments after --resume are passed to pyligprep run)
-project=$PWD/sin_work sbatch --gpus=1 scripts/run_sin_slurm.sh --resume --opt-maxcycles 400
+sbatch --chdir="$PWD/sin_work" scripts/run_sin_slurm.sh --resume --opt-maxcycles 400
 ```
 
 Slurm's standard output and standard error go to `run_sin_slurm.sh.JOBID.out` / `.err`.
@@ -367,6 +367,26 @@ coverage data to `validation/`. It uses `--cov`, so add `pytest-cov` to the virt
 Do not submit several jobs for the same output directory at the same time.
 `--threads` and `--memory-mb` are application settings and do not change the Slurm
 allocation. To change the allocation too, put `sbatch` options before the script name.
+
+For one multithreaded pyligprep process, request `--ntasks=1 --cpus-per-task=8` and omit `--threads`.
+`--ntasks` requests tasks/processes, while `--cpus-per-task` requests CPUs for each task.
+CPU IDs need not be consecutive, and a Slurm CPU may be a core or a hardware thread depending on the cluster.
+CPU binding/cgroups enforce which CPUs the process can use; a thread count alone does not bind it to CPU IDs.
+See the [Slurm CPU management guide](https://slurm.schedmd.com/cpu_management.html) and
+[CPU definitions](https://slurm.schedmd.com/mc_support.html#definitions).
+
+In a running Slurm job, `opt` / `resp` / `run` choose the thread count as follows:
+
+- Use `SLURM_CPUS_PER_TASK` (default 1 when not specified), both for direct batch-script launches and inside `srun`.
+  Cap it at `SLURM_CPUS_ON_NODE` and the size of `os.sched_getaffinity(0)` when available. Preserve the existing affinity.
+- Require one task (`SLURM_NTASKS`, or `SLURM_STEP_NUM_TASKS` inside an `srun` step).
+  Multiple tasks produce an input error explaining `--ntasks=1 --cpus-per-task=N`; task counts are never converted to CPUs.
+- On `--resume`, an omitted `--threads` recomputes the count from the current allocation. An explicit positive value
+  may use fewer CPUs, but exceeding the allocation/affinity limit or malformed allocation values is an input error.
+
+The selected count and allowed logical CPU IDs are printed at startup. The count is saved in `state.json` and passed
+to PySCF's OpenMP setting through `lib.num_threads`; it does not describe the total number of auxiliary/driver threads.
+Outside Slurm, the default remains 8, or the saved value when resuming; `--threads N` overrides it.
 
 ## Calculation settings
 
@@ -383,7 +403,7 @@ allocation. To change the allocation too, put `sbatch` options before the script
 | geomeTRIC | GAU_TIGHT, analytical initial Hessian, trust=0.05, tmax=0.10 |
 | Geometry constraints | geomeTRIC only: `--constraints constraints.txt`, atom numbers start at 1 |
 | Device | `--device auto` / `gpu` / `cpu` |
-| Resources | `--threads 8 --memory-mb 22000` |
+| Resources | `--threads`: automatic under Slurm, otherwise 8; `--memory-mb 22000` |
 | SCF cycle limit | `--scf-maxcycle 512` (Gaussian `SCF=MaxCycle`; DFT Newton SCF is capped at 100) |
 | ESP | Gas-phase HF/6-31G*, Cartesian d functions, RHF for closed shell / UHF for open shell, no density fitting |
 | ESP grid | GAMESS radii from GPU4PySCF 1.9.1, scale factors 1.4/1.6/1.8/2.0, `--density 1.0` points/Å² |

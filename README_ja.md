@@ -345,19 +345,19 @@ pyligprep run -i sin_h.pdb -o sin_named_run \
 
 | スクリプト | 用途 | 要求資源 |
 | --- | --- | --- |
-| `scripts/run_sin_slurm.sh` | コハク酸ジアニオン（SIN）の `check` と `run` を行う例 | 8タスク×1 CPU、1 CPUあたり7 GB、GPU指定なし、時間指定なし |
+| `scripts/run_sin_slurm.sh` | コハク酸ジアニオン（SIN）の `check` と `run` を行う例 | 1タスク×8 CPU、1 CPUあたり7 GB、GPU 1基、時間指定なし |
 | `scripts/test_gpu_slurm.sh` | `gpu` マーカーのテスト（AmberTools・参照テストも有効） | GPU 1基、CPU 4、メモリ24 GB、上限1時間 |
 
-`run_sin_slurm.sh` は、環境変数 `project` が指すディレクトリの `sin_h.pdb` と `sin_resp_constraints.json` を読み込み、
-`$project/sin_run` に出力する。仮想環境のパス（`/home/moriwaki/...`）と `--amber-bin` はスクリプト内に固定されている。
-`run` には `--device gpu` を指定しているが、スクリプト自体はGPUを要求していない。GPUのないノードに割り当てられると停止するため、
-GPUを要求するオプションを `sbatch` に付けて投入する。
+`run_sin_slurm.sh` はジョブの作業ディレクトリの `sin_h.pdb` と `sin_resp_constraints.json` を読み込み、
+同じ場所の `sin_run` に出力する。仮想環境の有効化パス（`/path/to/.venv/bin/activate`）と
+`--amber-bin` はスクリプト内で設定する。`sbatch` で投入してGPU 1基を要求し、
+新規計算・再開ともバッチスクリプトから `pyligprep` を直接呼び出す。
 
 ```bash
-project=$PWD/sin_work sbatch --gpus=1 scripts/run_sin_slurm.sh
+sbatch --chdir="$PWD/sin_work" scripts/run_sin_slurm.sh
 
 # 途中で止まった計算を再開する（--resume 以降は pyligprep run に渡される）
-project=$PWD/sin_work sbatch --gpus=1 scripts/run_sin_slurm.sh --resume --opt-maxcycles 400
+sbatch --chdir="$PWD/sin_work" scripts/run_sin_slurm.sh --resume --opt-maxcycles 400
 ```
 
 Slurmの標準出力・標準エラーは `run_sin_slurm.sh.JOBID.out` / `.err`。
@@ -367,6 +367,26 @@ Slurmの標準出力・標準エラーは `run_sin_slurm.sh.JOBID.out` / `.err`�
 同じ出力先に対して複数のジョブを同時に投入しない。
 `--threads` や `--memory-mb` はアプリケーション側の設定であり、Slurmの割り当て量は
 変更しない。割り当て量も変える場合は `sbatch` のオプションをスクリプト名の前に指定する。
+
+1プロセスで並列計算するpyligprepでは、`--ntasks=1 --cpus-per-task=8` を要求し、`--threads` は省略する。
+`--ntasks` はタスク／プロセス数、`--cpus-per-task` は1タスクあたりのCPU数を指定する。
+CPU番号が連続する保証はなく、SlurmのCPUが物理コアとハードウェアスレッドのどちらを指すかもクラスタ設定による。
+使用できるCPUの範囲を制限するのはCPU binding／cgroupであり、スレッド数の指定だけではCPU番号を固定しない。
+[SlurmのCPU管理資料](https://slurm.schedmd.com/cpu_management.html)と
+[CPUの定義](https://slurm.schedmd.com/mc_support.html#definitions)も参照。
+
+Slurmジョブ内の `opt` / `resp` / `run` は次のようにスレッド数を決定する。
+
+- バッチスクリプトからの直接起動も `srun` 内も `SLURM_CPUS_PER_TASK`（未指定時1）を使う。
+  取得できる場合は `SLURM_CPUS_ON_NODE` と `os.sched_getaffinity(0)` のCPU数を上限とし、既存のCPU affinityは変更しない。
+- タスク数（`SLURM_NTASKS`、`srun` のステップ内では `SLURM_STEP_NUM_TASKS`）は1を要求する。
+  複数タスクは `--ntasks=1 --cpus-per-task=N` を案内する入力エラーとし、タスク数をCPU数に換算しない。
+- `--resume` でも `--threads` を省略すれば現在の割り当てから再計算する。明示した正整数でCPU数を減らすことはできるが、
+  割り当て／affinityの上限を超える値や不正な割り当て情報は入力エラーとする。
+
+決定したスレッド数と使用可能な論理CPU番号を起動時に表示する。スレッド数は `state.json` に保存し、
+`lib.num_threads` でPySCFのOpenMP設定へ渡す。この数は補助処理・ドライバを含めた総スレッド数を表すものではない。
+Slurm外では既定値8、再開時は保存値を使い、`--threads N` で上書きする。
 
 ## 計算条件
 
@@ -383,7 +403,7 @@ Slurmの標準出力・標準エラーは `run_sin_slurm.sh.JOBID.out` / `.err`�
 | geomeTRIC | GAU_TIGHT、初期解析Hessian、trust=0.05、tmax=0.10 |
 | 幾何拘束 | geomeTRICのみ `--constraints constraints.txt`、原子番号は1始まり |
 | 計算装置 | `--device auto` / `gpu` / `cpu` |
-| 資源 | `--threads 8 --memory-mb 22000` |
+| 資源 | `--threads`：Slurmでは自動、それ以外は8。`--memory-mb 22000` |
 | SCFの反復回数上限 | `--scf-maxcycle 512`（Gaussianの `SCF=MaxCycle` に対応。DFTのNewton SCFでは100が上限） |
 | ESP | 気相HF/6-31G*、Cartesian d、閉殻RHF／開殻UHF、密度フィッティングなし |
 | ESP点群 | GPU4PySCF 1.9.1のGAMESS半径、倍率1.4/1.6/1.8/2.0、`--density 1.0` 点/Å² |

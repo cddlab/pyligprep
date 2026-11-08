@@ -3,7 +3,7 @@
 import argparse
 import json
 import sys
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 
 from pyligprep import __version__
@@ -35,7 +35,14 @@ def _chemical_arguments(parser):
 
 def _quantum_arguments(parser):
   parser.add_argument("--device", choices=("auto", "gpu", "cpu"))
-  parser.add_argument("--threads", type=int)
+  parser.add_argument(
+    "--threads",
+    type=int,
+    help=(
+      "CPU threads: automatically use Slurm CPUs per task (single task only), including on resume; "
+      "otherwise keep the saved value or default to 8. An explicit value must fit the Slurm/CPU-affinity limit"
+    ),
+  )
   parser.add_argument("--memory-mb", type=int)
   parser.add_argument(
     "--scf-maxcycle",
@@ -154,6 +161,22 @@ def _options(cls, args, saved, group):
   return cls(**values)
 
 
+def _quantum_options(args, saved):
+  from pyligprep.quantum import QuantumOptions
+  from pyligprep.resources import cpu_affinity, in_slurm_job, resolve_threads
+
+  quantum = _options(QuantumOptions, args, saved, "quantum")
+  # A saved thread count belongs to the previous allocation, not the current job.
+  requested = args.threads if in_slurm_job() else quantum.threads
+  quantum = replace(quantum, threads=resolve_threads(requested))
+  quantum.validate()
+  if in_slurm_job():
+    affinity = cpu_affinity()
+    allowed = ",".join(map(str, affinity)) if affinity is not None else "unavailable"
+    print(f"CPU threads: {quantum.threads} (Slurm; allowed logical CPU IDs: {allowed})")
+  return quantum
+
+
 def _molecule(args):
   from pyligprep.artifacts import completed_result, load_state
   from pyligprep.chemistry import load_molecule
@@ -219,11 +242,8 @@ def dispatch(args):
     raise InputError("Specify -o for a new calculation; --resume already identifies its output")
   if args.command == "export":
     return _export(args, output)
-  from pyligprep.quantum import QuantumOptions
-
   mol, saved = _molecule(args)
-  quantum = _options(QuantumOptions, args, saved, "quantum")
-  quantum.validate()
+  quantum = _quantum_options(args, saved)
   if args.command in ("opt", "run"):
     from pyligprep.optimization import OptimizationOptions, optimize
 

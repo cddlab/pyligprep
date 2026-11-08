@@ -3,6 +3,18 @@
 初期実装の検証日：2026-11-06。
 以下のコマンド表記は現行の引数名に統一している。
 
+## SlurmのCPU割り当てに応じたスレッド数（2026-11-08追記）
+
+- `--threads` 省略時、バッチ直接起動も `srun` 内も `SLURM_CPUS_PER_TASK` を使い、
+  CPU affinityのCPU数を上限とする。再開時は前のジョブの保存値より現在の割り当てを優先する。
+  明示した値の割り当て超過は計算開始前に拒否する。Slurm外の既定値8は維持。
+- 環境変数・affinityを模擬し、1タスク×8 CPU、複数タスクの拒否、srunステップ、
+  非連続CPU番号、再開時の割り当て変更、不正値を検証。PySCFへのスレッド数受け渡しも確認。
+- 通常テスト **219件成功、15件スキップ**（GPU・AmberTools・reference）。Ruff、変更ファイルのty、
+  Slurmスクリプトの構文検査は成功。全体のtyは既存の `dispersion.py` の3件が残る。
+- Slurm設定の読み取りで `select/cons_tres`、`CR_CORE`、`task/cgroup,task/affinity`、
+  `ConstrainCores=yes` を確認。Slurm計算ジョブの投入・GPU実走は行っていない。
+
 ## 最適化・SCFの引数名統一（2026-11-08追記）
 
 - 引数を `--opt-maxcycles`、`--opt-maxstep`、`--scf-maxcycle`、Pythonのフィールドと保存キーを

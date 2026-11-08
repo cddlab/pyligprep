@@ -27,8 +27,8 @@ uv build
   AmberToolsの場所は `PYLIGPREP_AMBER_BIN`、`AMBERHOME/bin`、PATH上の `antechamber` の順で解決。
 - `reference` テストは AmberTools 同梱の元の PyRESP / `pyresp_gen.py` を比較用オラクルとしてsubprocessで呼ぶ（実行時依存ではない）。
 - GPUテストはSlurm経由: `sbatch scripts/test_gpu_slurm.sh`（partition `q4`、`--cov` を使うため `pytest-cov` が別途必要）。
-  `scripts/run_sin_slurm.sh` はSIN専用の `run` 例（環境変数 `project` が入力ディレクトリ、GPU要求なしで `--device gpu`
-  のため `sbatch --gpus=1` で投入）。module名・パスはこの計算機固有。
+  `scripts/run_sin_slurm.sh` はSIN専用の `run` 例（作業ディレクトリが入力ディレクトリ、GPU 1基、
+  1タスク×8 CPUを要求し、`sbatch` で投入したスクリプトから `pyligprep` を直接起動）。module名・パスはこの計算機固有。
 - AmberToolsの探索: CLIは `--amber-bin` かPATHのみ。`PYLIGPREP_AMBER_BIN` / `AMBERHOME` を見るのはテストだけ。
 - AmberToolsモジュールをロードした環境では `unset PYTHONPATH` してからvenvを使う（AmberTools側のPythonが混入するため）。
 - 通常テストはCPUでHF/ESPまで実行するが、CPUでの構造最適化は実走しない。
@@ -86,6 +86,9 @@ ESP座標はBohr／原子単位、`Molecule` の座標はÅ（`esp.BOHR` で変�
   `--help` 先頭のバージョン行を付けるため、サブコマンドは `argparse.ArgumentParser` ではなくこのクラスで作る
   （`add_parser` は親のクラスを引き継ぐ）。
 - `--resume` は `tmp/state.json` の settings を読み込み（`artifacts.load_state()`）、CLIで明示した値だけ上書き（`_options()`）。charge/multiplicity の変更は拒否。
+- Slurmジョブ内の `--threads` 省略時だけは、再開時も現在の割り当てから決定し直す（`cli._quantum_options()`）。
+  `resources.py` が `SLURM_CPUS_PER_TASK` とCPU affinityを参照し、複数タスクと明示値の超過を拒否する。
+  CPU affinity自体は変更しない。Python APIの `QuantumOptions.threads` は引き続き明示整数（既定8）。
 - `pipeline.run_pipeline` は `run` ステージを `reuse_complete=False` で開き、子ステージ（`opt`/`resp`/`export`）を毎回
   再訪する。各子ステージが自身のキャッシュを判定する。CLIと同じ関数（`optimize` / `calculate_charges` / `export_parameters`）を使う。
 - 想定内の失敗は `errors.py` の `PreparationError` 派生（`InputError` / `CalculationError` / `DependencyError`）で送出し、
