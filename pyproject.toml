@@ -1,6 +1,6 @@
 [project]
 name = "pyligprep"
-version = "0.0.1"
+version = "0.0.2"
 description = "GPU-accelerated ligand preparation toolkit for molecular simulations"
 readme = "README.md"
 requires-python = ">=3.12"
