@@ -379,6 +379,7 @@ allocation. To change the allocation too, put `sbatch` options before the script
 | SCF | DFT uses density fitting and Newton SCF (at most 100 cycles), integration grid level 3 |
 | Convergence | SCF energy 1e-10, gradient 1e-6. Berny: gradientmax 1.5e-5, gradientrms 1e-5, stepmax 6e-5, steprms 4e-5 (atomic units) |
 | Steps | `--max-steps 200` |
+| Initial trust radius | `--opt-trust N`: positive integer on the Gaussian `Opt=MaxStep=N` scale; omitted by default |
 | geomeTRIC | GAU_TIGHT, analytical initial Hessian, trust=0.05, tmax=0.10 |
 | Geometry constraints | geomeTRIC only: `--constraints constraints.txt`, atom numbers start at 1 |
 | Device | `--device auto` / `gpu` / `cpu` |
@@ -397,6 +398,21 @@ needs no GPU and does not accept these quantum-chemistry options.
 The HF for the ESP is RHF for a closed-shell singlet and UHF otherwise, regardless of `--scf-type`.
 
 Berny's internal-coordinate thresholds and geomeTRIC's Cartesian thresholds are not the same thing.
+
+`--opt-trust N` controls the **initial geometry trust radius**, using the input scale of Gaussian 16's
+`Opt=MaxStep=N`: `0.01 * N` in Bohr/radian for Berny's internal coordinates. For example, `--opt-trust 10`
+sets Berny's initial radius to `0.1`, and `--opt-trust 30` to `0.3`. Only positive integers are accepted.
+For geomeTRIC, the length is converted to Å: `--opt-trust 10` gives approximately `0.052918 Å`.
+geomeTRIC uses a Cartesian displacement metric, so this conversion does not make the two optimizers or
+their steps equivalent to Gaussian. Its `tmax` remains `0.10 Å` unless the requested initial radius is
+larger; in that case `tmax` is raised to the initial radius to prevent silent clipping.
+
+When omitted for a new calculation, existing defaults are kept: Berny `0.3` and geomeTRIC `0.05 Å`
+with `tmax=0.10 Å`. On resume, an omitted `--opt-trust` keeps the saved value; an explicit value overrides
+it, and older saved states without this option use the existing defaults. The optimizer may adjust the
+radius during optimization. This option does not set a fixed maximum step, the geometry convergence
+thresholds (`stepmax` / `steprms`), the iteration count (`--max-steps`), or the SCF orbital rotation step.
+
 `auto` falls back to the CPU when GPU initialization is unavailable.
 SCF non-convergence, out-of-memory, and other failures after a GPU start are never hidden by rerunning on the CPU.
 With `gpu`, it stops if no GPU is available.
@@ -415,6 +431,9 @@ pyligprep opt --resume work/opt --max-steps 400
 
 # Switch the optimization algorithm, starting from the same structure
 pyligprep opt --resume work/opt --optimizer geometric
+
+# Restart from the saved geometry with a specified initial trust radius (Gaussian MaxStep=10 scale)
+pyligprep opt --resume work/opt --opt-trust 10
 
 # If the RESP fit ran out of iterations, continue while reusing the completed ESP
 pyligprep resp --resume work/resp --max-iterations 100

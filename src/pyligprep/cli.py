@@ -45,6 +45,17 @@ def _opt_arguments(parser):
   parser.add_argument("--method")
   parser.add_argument("--basis")
   parser.add_argument("--max-steps", type=int)
+  parser.add_argument(
+    "--opt-trust",
+    type=int,
+    metavar="N",
+    help=(
+      "Initial geometry trust radius on the Gaussian MaxStep scale (positive integer): "
+      "0.01 N Bohr/radian for Berny; the length converted to angstrom for geomeTRIC "
+      "(different coordinate metric; tmax raised if needed). "
+      "Omit to keep the saved value on resume or the existing backend default"
+    ),
+  )
   parser.add_argument("--scf-type", choices=("auto", "rks", "uks"))
   parser.add_argument("--constraints", type=Path, help="geomeTRIC constraints file")
 

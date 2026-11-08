@@ -33,7 +33,7 @@ def run_pipeline(
   resname = resolve_resname(resname, output, resume)
   amber_tools(amber_bin)
   settings = {
-    "optimization": asdict(optimization),
+    "optimization": optimization.to_dict(),
     "resp": asdict(resp),
     "quantum": asdict(quantum),
     "amber_bin": str(amber_bin) if amber_bin else None,

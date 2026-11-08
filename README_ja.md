@@ -379,6 +379,7 @@ Slurmの標準出力・標準エラーは `run_sin_slurm.sh.JOBID.out` / `.err`�
 | SCF | DFTは密度フィッティングとNewton SCF（最大100サイクル）、積分グリッドlevel 3 |
 | 収束 | SCFエネルギー1e-10・勾配1e-6。Bernyは gradientmax 1.5e-5、gradientrms 1e-5、stepmax 6e-5、steprms 4e-5（原子単位） |
 | ステップ | `--max-steps 200` |
+| 初期信頼半径 | `--opt-trust N`：Gaussianの `Opt=MaxStep=N` と同じ入力スケールの正整数。既定では未指定 |
 | geomeTRIC | GAU_TIGHT、初期解析Hessian、trust=0.05、tmax=0.10 |
 | 幾何拘束 | geomeTRICのみ `--constraints constraints.txt`、原子番号は1始まり |
 | 計算装置 | `--device auto` / `gpu` / `cpu` |
@@ -397,6 +398,20 @@ GPUを必要とせず、これらの量子計算用引数は受け取らない�
 ESP用のHFは `--scf-type` に関係なく、閉殻一重項ならRHF、それ以外はUHFになる。
 
 Bernyの内部座標閾値とgeomeTRICのCartesian座標閾値は同じものではない。
+
+`--opt-trust N` は**構造最適化の初期信頼半径**を指定する。Gaussian 16の `Opt=MaxStep=N` に合わせ、
+Bernyの内部座標では `0.01 * N` Bohr/radianとする。たとえば `--opt-trust 10` は初期半径 `0.1`、
+`--opt-trust 30` は `0.3`。指定できる値は正整数のみ。
+geomeTRICでは長さをÅに換算し、`--opt-trust 10` は約 `0.052918 Å` となる。
+geomeTRICはCartesian変位に基づくため、この換算で両最適化法やステップがGaussianと同等になるわけではない。
+`tmax` は通常 `0.10 Å` を維持し、指定した初期半径がそれを超える場合は、暗黙の切詰めを避けるため
+初期半径と同じ値まで引き上げる。
+
+新規計算で省略した場合は従来の既定値を維持する：Bernyは `0.3`、geomeTRICは `0.05 Å`、`tmax=0.10 Å`。
+再開時に省略すると保存済みの値を引き継ぎ、明示すると上書きする。この設定の追加前に保存した状態では従来の既定値を使う。
+最適化中はアルゴリズムが半径を調整する。このオプションは固定の最大ステップ、構造収束の変位閾値
+（`stepmax` / `steprms`）、反復回数（`--max-steps`）、SCFの軌道回転ステップを指定するものではない。
+
 `auto` はGPU初期化が利用できない場合にCPUへフォールバックする。
 GPUで始めた後のSCF未収束・メモリ不足などをCPU再実行で隠すことはない。
 `gpu` 指定時はGPUがなければ停止する。
@@ -415,6 +430,9 @@ pyligprep opt --resume work/opt --max-steps 400
 
 # 同じ構造から最適化アルゴリズムを切り替え
 pyligprep opt --resume work/opt --optimizer geometric
+
+# 初期信頼半径を指定して保存構造から再開（GaussianのMaxStep=10と同じ入力スケール）
+pyligprep opt --resume work/opt --opt-trust 10
 
 # RESPフィットの反復不足なら、完了済みESPを再利用して続行
 pyligprep resp --resume work/resp --max-iterations 100

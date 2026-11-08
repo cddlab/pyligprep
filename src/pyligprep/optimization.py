@@ -22,6 +22,32 @@ class OptimizationOptions:
   max_steps: int = 200
   scf_type: str = "auto"
   constraints: str | None = None
+  opt_trust: int | None = None
+
+  def __post_init__(self):
+    if self.opt_trust is not None and (type(self.opt_trust) is not int or self.opt_trust <= 0):
+      raise InputError("opt-trust must be a positive integer (Gaussian MaxStep scale: 0.01 N Bohr/radian)")
+
+  def to_dict(self) -> dict:
+    settings = asdict(self)
+    # Preserve fingerprints of existing calculations when the option is omitted.
+    if self.opt_trust is None:
+      settings.pop("opt_trust")
+    return settings
+
+
+def _trust_parameters(options: OptimizationOptions) -> dict[str, float]:
+  """Translate the Gaussian input scale to each optimizer's trust-radius convention."""
+  if options.opt_trust is None:
+    return {}
+  trust = 0.01 * options.opt_trust
+  if options.optimizer == "geometric":
+    from pyscf import lib
+
+    trust *= lib.param.BOHR
+    # geomeTRIC otherwise silently clips an initial radius above tmax.
+    return {"trust": trust, "tmax": max(0.10, trust)}
+  return {"trust": trust}
 
 
 def optimizer_parameters(options: OptimizationOptions, directory: Path):
@@ -37,6 +63,7 @@ def optimizer_parameters(options: OptimizationOptions, directory: Path):
       "gradientrms": 1e-5,
       "stepmax": 6e-5,
       "steprms": 4e-5,
+      **_trust_parameters(options),
     }
   if options.optimizer == "geometric":
     from pyscf.geomopt import geometric_solver
@@ -47,6 +74,7 @@ def optimizer_parameters(options: OptimizationOptions, directory: Path):
       "reset": False,
       "trust": 0.05,
       "tmax": 0.10,
+      **_trust_parameters(options),
     }
     if options.constraints:
       path = directory / "constraints.txt"
@@ -95,7 +123,7 @@ def optimize(
   resume=False,
   publish=True,
 ) -> dict:
-  settings = {"optimization": asdict(options), "quantum": asdict(quantum)}
+  settings = {"optimization": options.to_dict(), "quantum": asdict(quantum)}
   with Stage(output, "opt", molecule.to_dict(), settings, resume, publish=publish) as stage:
     if stage.cached is not None:
       return stage.cached
