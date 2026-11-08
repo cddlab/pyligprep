@@ -11,3 +11,5 @@ scratch/
 pyligprep-*.log
 pyligprep-*.err
 *.egg-info/
+
+.python-version
